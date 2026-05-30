@@ -19,8 +19,7 @@ from telegram.request import HTTPXRequest
 # CONFIG
 # =====================
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-ADMIN_ID = os.getenv("ADMIN_ID")
-ADMIN_ID = int(ADMIN_ID) if ADMIN_ID else 0
+ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
 
 QR_IMAGE = "qr.png"
 DB_FILE = "db.json"
@@ -29,7 +28,7 @@ if not BOT_TOKEN:
     raise Exception("BOT_TOKEN is missing!")
 
 # =====================
-# DB SYSTEM
+# DB
 # =====================
 def load_db():
     if os.path.exists(DB_FILE):
@@ -77,7 +76,6 @@ async def free(update: Update, context: ContextTypes.DEFAULT_TYPE):
     }
 
     save_db()
-
     await update.message.reply_text("🎉 FREE PLAN ACTIVATED (1 page)")
 
 # =====================
@@ -97,7 +95,7 @@ async def buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 # =====================
-# HANDLE FACEBOOK PAGE
+# HANDLE PAGE LINK
 # =====================
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.message.from_user.id)
@@ -126,7 +124,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("✅ Page saved")
 
 # =====================
-# PAYMENT SCREENSHOT → ADMIN BUTTONS
+# PAYMENT SCREENSHOT → ADMIN
 # =====================
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
@@ -140,22 +138,17 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     markup = InlineKeyboardMarkup(keyboard)
 
-    await context.bot.forward_message(
+    await context.bot.send_photo(
         chat_id=ADMIN_ID,
-        from_chat_id=update.message.chat_id,
-        message_id=update.message.message_id
-    )
-
-    await context.bot.send_message(
-        chat_id=ADMIN_ID,
-        text=f"💰 Payment from User ID: {user.id}",
+        photo=update.message.photo[-1].file_id,
+        caption=f"💰 Payment from User ID: {user.id}",
         reply_markup=markup
     )
 
     await update.message.reply_text("📩 Sent to admin")
 
 # =====================
-# APPROVE BUTTON SYSTEM
+# APPROVE BUTTON
 # =====================
 async def approve_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -174,10 +167,11 @@ async def approve_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "50": 80
     }
 
-    limit = plan_map.get(plan)
-    if not limit:
+    if plan not in plan_map:
         await query.edit_message_text("❌ Invalid plan")
         return
+
+    limit = plan_map[plan]
 
     users[user_id] = {
         "plan": plan,
@@ -217,7 +211,7 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 # =====================
-# MAIN (FIXED RENDER VERSION)
+# MAIN (RENDER FIX)
 # =====================
 async def main():
     request = HTTPXRequest(connect_timeout=30, read_timeout=30)
@@ -236,12 +230,10 @@ async def main():
 
     print("Bot running on Render...")
 
-    # ✅ FIX FOR RENDER / PYTHON 3.13+ EVENT LOOP ISSUE
     await app.initialize()
     await app.start()
     await app.updater.start_polling()
     await app.updater.idle()
-
 
 if __name__ == "__main__":
     asyncio.run(main())
