@@ -2,7 +2,6 @@ import time
 import json
 import os
 import re
-import asyncio
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -13,7 +12,6 @@ from telegram.ext import (
     ContextTypes,
     filters,
 )
-from telegram.request import HTTPXRequest
 
 # =====================
 # CONFIG
@@ -52,16 +50,19 @@ def is_facebook_link(text: str):
     return bool(re.match(r"https?://(www\.)?facebook\.com/.+", text))
 
 # =====================
-# HANDLERS
+# START
 # =====================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "សួស្តី! 🙏\n\n"
-        "👉 /free - FREE PLAN (1 page)\n"
+        "👉 /free - FREE PLAN\n"
         "👉 /buy - PREMIUM PLAN\n"
-        "👉 /status - ស្ថានភាព"
+        "👉 /status - STATUS"
     )
 
+# =====================
+# FREE PLAN
+# =====================
 async def free(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.message.from_user.id)
 
@@ -76,7 +77,7 @@ async def free(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("🎉 FREE PLAN ACTIVATED (1 page)")
 
 # =====================
-# BUY (UPDATED PRICING)
+# BUY (NEW PRICES)
 # =====================
 async def buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
@@ -124,40 +125,43 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("✅ Page saved")
 
 # =====================
-# PHOTO HANDLER (ADMIN REVIEW)
+# PHOTO HANDLER
 # =====================
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
 
     keyboard = [
-        [InlineKeyboardButton("💵 $3 (10 pages)", callback_data=f"approve:{user.id}:3")],
-        [InlineKeyboardButton("💵 $6 (20 pages)", callback_data=f"approve:{user.id}:6")],
-        [InlineKeyboardButton("💵 $12 (30 pages)", callback_data=f"approve:{user.id}:12")],
+        [InlineKeyboardButton("$3 (10 pages)", callback_data=f"approve:{user.id}:3")],
+        [InlineKeyboardButton("$6 (20 pages)", callback_data=f"approve:{user.id}:6")],
+        [InlineKeyboardButton("$12 (30 pages)", callback_data=f"approve:{user.id}:12")],
     ]
+
+    markup = InlineKeyboardMarkup(keyboard)
 
     await context.bot.send_photo(
         chat_id=ADMIN_ID,
         photo=update.message.photo[-1].file_id,
         caption=f"💰 Payment from User ID: {user.id}",
-        reply_markup=InlineKeyboardMarkup(keyboard)
+        reply_markup=markup
     )
 
     await update.message.reply_text("📩 Sent to admin")
 
 # =====================
-# APPROVE CALLBACK (FIXED + CONSISTENT)
+# APPROVE CALLBACK (FIXED)
 # =====================
 async def approve_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
     if query.from_user.id != ADMIN_ID:
-        await query.edit_message_text("❌ Not allowed")
         return
 
-    _, user_id, plan = query.data.split(":")
+    try:
+        _, user_id, plan = query.data.split(":")
+    except:
+        return
 
-    # ✅ FIXED PLAN MAPPING
     plan_map = {
         "3": 10,
         "6": 20,
@@ -165,7 +169,7 @@ async def approve_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     }
 
     if plan not in plan_map:
-        await query.edit_message_text("❌ Invalid plan")
+        await query.message.reply_text("❌ Invalid plan")
         return
 
     limit = plan_map[plan]
@@ -179,12 +183,13 @@ async def approve_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     save_db()
 
+    # SAFE SEND (no edit crash)
     await context.bot.send_message(
         chat_id=int(user_id),
         text=f"🎉 Approved!\n💳 ${plan}\n📌 Limit: {limit} pages"
     )
 
-    await query.edit_message_text(f"✅ Approved user {user_id} → ${plan}")
+    await query.message.reply_text(f"✅ Approved user {user_id}")
 
 # =====================
 # STATUS
@@ -208,12 +213,10 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 # =====================
-# MAIN (RENDER SAFE FIXED)
+# MAIN (FIXED RENDER)
 # =====================
-async def main():
-    request = HTTPXRequest(connect_timeout=30, read_timeout=30)
-
-    app = ApplicationBuilder().token(BOT_TOKEN).request(request).build()
+def main():
+    app = ApplicationBuilder().token(BOT_TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("free", free))
@@ -224,13 +227,10 @@ async def main():
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     app.add_handler(CallbackQueryHandler(approve_callback))
 
-    print("Bot running on Render...")
+    print("Bot running...")
 
-    await app.initialize()
-    await app.start()
-    await app.updater.start_polling()
-
-    await asyncio.Event().wait()
+    # IMPORTANT FIX FOR RENDER
+    app.run_polling(drop_pending_updates=True)
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
