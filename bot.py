@@ -2,6 +2,7 @@ import time
 import json
 import os
 import re
+import asyncio
 
 from telegram import Update, InputFile
 from telegram.ext import (
@@ -204,7 +205,7 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 # =====================
-# MAIN (RENDER SAFE)
+# MAIN (RENDER FIXED)
 # =====================
 def main():
     request = HTTPXRequest(connect_timeout=30, read_timeout=30)
@@ -221,6 +222,10 @@ def main():
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
 
     print("Bot running on Render...")
+
+    # 🔥 FIX RENDER EVENT LOOP ISSUE
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
 
     app.run_polling(drop_pending_updates=True)
 
