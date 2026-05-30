@@ -3,11 +3,12 @@ import json
 import os
 import re
 
-from telegram import Update, InputFile
+from telegram import Update, InputFile, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
     MessageHandler,
+    CallbackQueryHandler,
     ContextTypes,
     filters,
 )
@@ -76,12 +77,10 @@ async def free(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     save_db()
 
-    await update.message.reply_text(
-        "🎉 FREE PLAN ACTIVATED\n📌 Limit: 1 page"
-    )
+    await update.message.reply_text("🎉 FREE PLAN ACTIVATED (1 page)")
 
 # =====================
-# BUY PLAN (UPDATED PRICING)
+# BUY PLAN
 # =====================
 async def buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_photo(
@@ -92,7 +91,7 @@ async def buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "💵 $15 → 20 Pages\n"
             "💵 $20 → 30 Pages\n"
             "💵 $50 → 80 Pages\n\n"
-            "📩 Send screenshot after payment"
+            "📩 Send payment screenshot"
         )
     )
 
@@ -116,24 +115,39 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ សូមផ្ញើ Facebook link ត្រឹមត្រូវ")
         return
 
-    limit = user.get("limit", 1)
+    limit = user["limit"]
 
     if limit != -1 and len(user["pages"]) >= limit:
-        await update.message.reply_text(
-            f"❌ Limit reached ({limit} pages)\n👉 Upgrade plan"
-        )
+        await update.message.reply_text("❌ Limit reached. Upgrade plan!")
         return
 
     user["pages"].append(text)
     save_db()
 
-    await update.message.reply_text("✅ Page បានរក្សាទុករួច")
+    await update.message.reply_text("✅ Page saved")
 
 # =====================
-# PAYMENT SCREENSHOT
+# PAYMENT SCREENSHOT (SEND TO ADMIN WITH BUTTONS)
 # =====================
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
+
+    keyboard = [
+        [
+            InlineKeyboardButton("✅ $8 (10 pages)", callback_data=f"approve:{user.id}:8"),
+        ],
+        [
+            InlineKeyboardButton("✅ $15 (20 pages)", callback_data=f"approve:{user.id}:15"),
+        ],
+        [
+            InlineKeyboardButton("✅ $20 (30 pages)", callback_data=f"approve:{user.id}:20"),
+        ],
+        [
+            InlineKeyboardButton("🔥 $50 (80 pages)", callback_data=f"approve:{user.id}:50"),
+        ],
+    ]
+
+    markup = InlineKeyboardMarkup(keyboard)
 
     await context.bot.forward_message(
         chat_id=ADMIN_ID,
@@ -143,53 +157,53 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await context.bot.send_message(
         chat_id=ADMIN_ID,
-        text=f"💰 Payment Request\nUser ID: {user.id}\n/approve {user.id} 8|15|20|50"
+        text=f"💰 Payment from User ID: {user.id}",
+        reply_markup=markup
     )
 
     await update.message.reply_text("📩 Sent to admin")
 
 # =====================
-# APPROVE (NEW PRICING SYSTEM)
+# APPROVE BUTTON SYSTEM
 # =====================
-async def approve(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.message.from_user.id != ADMIN_ID:
+async def approve_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    if query.from_user.id != ADMIN_ID:
+        await query.edit_message_text("❌ Not allowed")
         return
 
-    try:
-        user_id = context.args[0]
-        plan = context.args[1]
+    _, user_id, plan = query.data.split(":")
 
-        plan_map = {
-            "8": 10,
-            "15": 20,
-            "20": 30,
-            "50": 80
-        }
+    plan_map = {
+        "8": 10,
+        "15": 20,
+        "20": 30,
+        "50": 80
+    }
 
-        if plan not in plan_map:
-            await update.message.reply_text("❌ Use: 8 | 15 | 20 | 50")
-            return
+    if plan not in plan_map:
+        await query.edit_message_text("❌ Invalid plan")
+        return
 
-        limit = plan_map[plan]
+    limit = plan_map[plan]
 
-        users[user_id] = {
-            "plan": plan,
-            "limit": limit,
-            "expire": time.time() + 365 * 86400,
-            "pages": []
-        }
+    users[user_id] = {
+        "plan": plan,
+        "limit": limit,
+        "expire": time.time() + 365 * 86400,
+        "pages": []
+    }
 
-        save_db()
+    save_db()
 
-        await context.bot.send_message(
-            chat_id=int(user_id),
-            text=f"🎉 Approved!\n💳 ${plan}\n📌 Limit: {limit} pages"
-        )
+    await context.bot.send_message(
+        chat_id=int(user_id),
+        text=f"🎉 Approved!\n💳 ${plan}\n📌 Limit: {limit} pages"
+    )
 
-        await update.message.reply_text("✅ Approved done")
-
-    except:
-        await update.message.reply_text("❌ /approve user_id 8|15|20|50")
+    await query.edit_message_text(f"✅ Approved user {user_id} → ${plan}")
 
 # =====================
 # STATUS
@@ -213,7 +227,7 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 # =====================
-# MAIN (RENDER SAFE)
+# MAIN (RENDER FIX)
 # =====================
 def main():
     request = HTTPXRequest(connect_timeout=30, read_timeout=30)
@@ -223,11 +237,12 @@ def main():
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("free", free))
     app.add_handler(CommandHandler("buy", buy))
-    app.add_handler(CommandHandler("approve", approve))
     app.add_handler(CommandHandler("status", status))
 
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
+
+    app.add_handler(CallbackQueryHandler(approve_callback))
 
     print("Bot running on Render...")
 
