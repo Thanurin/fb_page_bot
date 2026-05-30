@@ -14,7 +14,7 @@ from telegram.ext import (
 from telegram.request import HTTPXRequest
 
 # =====================
-# CONFIG (SAFE FOR RENDER)
+# CONFIG
 # =====================
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = os.getenv("ADMIN_ID")
@@ -27,7 +27,7 @@ if not BOT_TOKEN:
     raise Exception("BOT_TOKEN is missing!")
 
 # =====================
-# LOAD / SAVE DB
+# DB
 # =====================
 def load_db():
     if os.path.exists(DB_FILE):
@@ -45,7 +45,7 @@ def save_db():
 users = load_db()
 
 # =====================
-# HELP FUNCTION
+# VALIDATION
 # =====================
 def is_facebook_link(text: str):
     return bool(re.match(r"https?://(www\.)?facebook\.com/.+", text))
@@ -56,9 +56,9 @@ def is_facebook_link(text: str):
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "សួស្តី! អតិថិជនជាទីគោរព 🙏\n\n"
-        "👉 /free - FREE PLAN (1 page)\n"
-        "👉 /buy - Premium plans\n"
-        "👉 /status - មើលស្ថានភាព"
+        "👉 /free - FREE PLAN\n"
+        "👉 /buy - PREMIUM PLAN\n"
+        "👉 /status - ស្ថានភាព"
     )
 
 # =====================
@@ -111,16 +111,12 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user = users[user_id]
 
-    # only allow facebook links
     if not is_facebook_link(text):
         await update.message.reply_text("❌ សូមផ្ញើ Facebook Page link ត្រឹមត្រូវ")
         return
 
-    # free limit
     if user["plan"] == "free" and len(user["pages"]) >= 1:
-        await update.message.reply_text(
-            "❌ FREE plan limit 1 page\n👉 /buy ដើម្បី upgrade"
-        )
+        await update.message.reply_text("❌ FREE plan limit 1 page")
         return
 
     user["pages"].append(text)
@@ -142,17 +138,13 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await context.bot.send_message(
         chat_id=ADMIN_ID,
-        text=(
-            f"💰 Payment Request\n"
-            f"User ID: {user.id}\n"
-            f"/approve {user.id} month"
-        )
+        text=f"💰 Payment Request\nUser ID: {user.id}\n/approve {user.id} month"
     )
 
-    await update.message.reply_text("📩 បានផ្ញើទៅ Admin រួចហើយ")
+    await update.message.reply_text("📩 Sent to admin")
 
 # =====================
-# APPROVE (ADMIN)
+# APPROVE
 # =====================
 async def approve(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message.from_user.id != ADMIN_ID:
@@ -169,7 +161,7 @@ async def approve(update: Update, context: ContextTypes.DEFAULT_TYPE):
         }
 
         if plan not in days_map:
-            await update.message.reply_text("❌ plan invalid")
+            await update.message.reply_text("❌ invalid plan")
             return
 
         users[user_id] = {
@@ -185,10 +177,10 @@ async def approve(update: Update, context: ContextTypes.DEFAULT_TYPE):
             text=f"🎉 Approved! Plan: {plan}"
         )
 
-        await update.message.reply_text("✅ Approved done")
+        await update.message.reply_text("✅ Approved")
 
     except:
-        await update.message.reply_text("❌ /approve user_id week|month|year")
+        await update.message.reply_text("Use: /approve user_id week|month|year")
 
 # =====================
 # STATUS
@@ -203,7 +195,7 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = users[user_id]
 
     if user["expire"] < time.time():
-        await update.message.reply_text("❌ Expired! /buy ដើម្បីបន្ត")
+        await update.message.reply_text("❌ Expired! /buy")
         return
 
     await update.message.reply_text(
@@ -212,24 +204,25 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 # =====================
-# MAIN (RENDER FIX)
+# MAIN (RENDER SAFE)
 # =====================
-request = HTTPXRequest(connect_timeout=30, read_timeout=30)
-
-app = ApplicationBuilder().token(BOT_TOKEN).request(request).build()
-
-app.add_handler(CommandHandler("start", start))
-app.add_handler(CommandHandler("free", free))
-app.add_handler(CommandHandler("buy", buy))
-app.add_handler(CommandHandler("approve", approve))
-app.add_handler(CommandHandler("status", status))
-
-app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
-app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
-
 def main():
+    request = HTTPXRequest(connect_timeout=30, read_timeout=30)
+
+    app = ApplicationBuilder().token(BOT_TOKEN).request(request).build()
+
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("free", free))
+    app.add_handler(CommandHandler("buy", buy))
+    app.add_handler(CommandHandler("approve", approve))
+    app.add_handler(CommandHandler("status", status))
+
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
+    app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
+
     print("Bot running on Render...")
-    app.run_polling()
+
+    app.run_polling(drop_pending_updates=True)
 
 if __name__ == "__main__":
     main()
