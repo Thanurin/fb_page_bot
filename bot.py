@@ -2,6 +2,7 @@ import time
 import json
 import os
 import re
+import asyncio
 
 from telegram import Update, InputFile, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -12,7 +13,6 @@ from telegram.ext import (
     ContextTypes,
     filters,
 )
-
 from telegram.request import HTTPXRequest
 
 # =====================
@@ -81,7 +81,7 @@ async def free(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("🎉 FREE PLAN ACTIVATED (1 page)")
 
 # =====================
-# BUY PLAN (YOUR PRICING)
+# BUY PLAN
 # =====================
 async def buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_photo(
@@ -217,9 +217,9 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 # =====================
-# MAIN (RENDER SAFE - FIXED)
+# MAIN (FIXED RENDER VERSION)
 # =====================
-def main():
+async def main():
     request = HTTPXRequest(connect_timeout=30, read_timeout=30)
 
     app = ApplicationBuilder().token(BOT_TOKEN).request(request).build()
@@ -236,8 +236,12 @@ def main():
 
     print("Bot running on Render...")
 
-    # IMPORTANT: correct way for Render
-    app.run_polling()
+    # ✅ FIX FOR RENDER / PYTHON 3.13+ EVENT LOOP ISSUE
+    await app.initialize()
+    await app.start()
+    await app.updater.start_polling()
+    await app.updater.idle()
+
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
