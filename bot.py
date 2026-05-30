@@ -2,7 +2,6 @@ import time
 import json
 import os
 import re
-import asyncio
 
 from telegram import Update, InputFile
 from telegram.ext import (
@@ -56,7 +55,7 @@ def is_facebook_link(text: str):
 # =====================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "សួស្តី! អតិថិជនជាទីគោរព 🙏\n\n"
+        "សួស្តី! 🙏\n\n"
         "👉 /free - FREE PLAN\n"
         "👉 /buy - PREMIUM PLAN\n"
         "👉 /status - ស្ថានភាព"
@@ -70,6 +69,7 @@ async def free(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     users[user_id] = {
         "plan": "free",
+        "limit": 1,
         "expire": time.time() + 9999999999,
         "pages": []
     }
@@ -77,21 +77,21 @@ async def free(update: Update, context: ContextTypes.DEFAULT_TYPE):
     save_db()
 
     await update.message.reply_text(
-        "🎉 FREE PLAN ACTIVATED\n"
-        "📌 អាចដាក់បាន 1 Facebook Page"
+        "🎉 FREE PLAN ACTIVATED\n📌 Limit: 1 page"
     )
 
 # =====================
-# BUY PLAN
+# BUY PLAN (UPDATED PRICING)
 # =====================
 async def buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_photo(
         photo=InputFile(QR_IMAGE),
         caption=(
-            "💳 Payment Plans:\n"
-            "1️⃣ $3 / week\n"
-            "2️⃣ $11.5 / month\n"
-            "3️⃣ $120 / year\n\n"
+            "💳 Pricing Plans:\n\n"
+            "💵 $8  → 10 Pages\n"
+            "💵 $15 → 20 Pages\n"
+            "💵 $20 → 30 Pages\n"
+            "💵 $50 → 80 Pages\n\n"
             "📩 Send screenshot after payment"
         )
     )
@@ -113,11 +113,15 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = users[user_id]
 
     if not is_facebook_link(text):
-        await update.message.reply_text("❌ សូមផ្ញើ Facebook Page link ត្រឹមត្រូវ")
+        await update.message.reply_text("❌ សូមផ្ញើ Facebook link ត្រឹមត្រូវ")
         return
 
-    if user["plan"] == "free" and len(user["pages"]) >= 1:
-        await update.message.reply_text("❌ FREE plan limit 1 page")
+    limit = user.get("limit", 1)
+
+    if limit != -1 and len(user["pages"]) >= limit:
+        await update.message.reply_text(
+            f"❌ Limit reached ({limit} pages)\n👉 Upgrade plan"
+        )
         return
 
     user["pages"].append(text)
@@ -139,13 +143,13 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await context.bot.send_message(
         chat_id=ADMIN_ID,
-        text=f"💰 Payment Request\nUser ID: {user.id}\n/approve {user.id} month"
+        text=f"💰 Payment Request\nUser ID: {user.id}\n/approve {user.id} 8|15|20|50"
     )
 
     await update.message.reply_text("📩 Sent to admin")
 
 # =====================
-# APPROVE
+# APPROVE (NEW PRICING SYSTEM)
 # =====================
 async def approve(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message.from_user.id != ADMIN_ID:
@@ -155,19 +159,23 @@ async def approve(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_id = context.args[0]
         plan = context.args[1]
 
-        days_map = {
-            "week": 7,
-            "month": 30,
-            "year": 365
+        plan_map = {
+            "8": 10,
+            "15": 20,
+            "20": 30,
+            "50": 80
         }
 
-        if plan not in days_map:
-            await update.message.reply_text("❌ invalid plan")
+        if plan not in plan_map:
+            await update.message.reply_text("❌ Use: 8 | 15 | 20 | 50")
             return
+
+        limit = plan_map[plan]
 
         users[user_id] = {
             "plan": plan,
-            "expire": time.time() + days_map[plan] * 86400,
+            "limit": limit,
+            "expire": time.time() + 365 * 86400,
             "pages": []
         }
 
@@ -175,13 +183,13 @@ async def approve(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await context.bot.send_message(
             chat_id=int(user_id),
-            text=f"🎉 Approved! Plan: {plan}"
+            text=f"🎉 Approved!\n💳 ${plan}\n📌 Limit: {limit} pages"
         )
 
-        await update.message.reply_text("✅ Approved")
+        await update.message.reply_text("✅ Approved done")
 
     except:
-        await update.message.reply_text("Use: /approve user_id week|month|year")
+        await update.message.reply_text("❌ /approve user_id 8|15|20|50")
 
 # =====================
 # STATUS
@@ -200,12 +208,12 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     await update.message.reply_text(
-        f"📌 Plan: {user['plan']}\n"
-        f"📄 Pages: {len(user['pages'])}"
+        f"📌 Plan: ${user['plan']}\n"
+        f"📄 Pages: {len(user['pages'])}/{user['limit']}"
     )
 
 # =====================
-# MAIN (RENDER FIXED)
+# MAIN (RENDER SAFE)
 # =====================
 def main():
     request = HTTPXRequest(connect_timeout=30, read_timeout=30)
@@ -222,10 +230,6 @@ def main():
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
 
     print("Bot running on Render...")
-
-    # 🔥 FIX RENDER EVENT LOOP ISSUE
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
 
     app.run_polling(drop_pending_updates=True)
 
