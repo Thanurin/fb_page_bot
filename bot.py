@@ -17,8 +17,10 @@ from telegram.ext import (
 # CONFIG
 # =====================
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-
 ADMIN_ID_RAW = os.getenv("ADMIN_ID")
+
+QR_IMAGE = "qr.png"
+DB_FILE = "db.json"
 
 if not BOT_TOKEN:
     raise Exception("BOT_TOKEN is missing!")
@@ -29,7 +31,8 @@ if not ADMIN_ID_RAW:
 try:
     ADMIN_ID = int(ADMIN_ID_RAW)
 except:
-    raise Exception("ADMIN_ID must be a number (Telegram user ID)")
+    raise Exception("ADMIN_ID must be a number")
+
 # =====================
 # DB
 # =====================
@@ -82,7 +85,7 @@ async def free(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("🎉 FREE PLAN ACTIVATED (1 page)")
 
 # =====================
-# BUY (NEW PRICES)
+# BUY
 # =====================
 async def buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
@@ -141,19 +144,17 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("$12 (30 pages)", callback_data=f"approve:{user.id}:12")],
     ]
 
-    markup = InlineKeyboardMarkup(keyboard)
-
     await context.bot.send_photo(
         chat_id=ADMIN_ID,
         photo=update.message.photo[-1].file_id,
         caption=f"💰 Payment from User ID: {user.id}",
-        reply_markup=markup
+        reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
     await update.message.reply_text("📩 Sent to admin")
 
 # =====================
-# APPROVE CALLBACK (FIXED)
+# APPROVE CALLBACK
 # =====================
 async def approve_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -174,7 +175,7 @@ async def approve_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     }
 
     if plan not in plan_map:
-        await query.message.reply_text("❌ Invalid plan")
+        await context.bot.send_message(chat_id=ADMIN_ID, text="❌ Invalid plan")
         return
 
     limit = plan_map[plan]
@@ -188,13 +189,15 @@ async def approve_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     save_db()
 
-    # SAFE SEND (no edit crash)
     await context.bot.send_message(
         chat_id=int(user_id),
         text=f"🎉 Approved!\n💳 ${plan}\n📌 Limit: {limit} pages"
     )
 
-    await query.message.reply_text(f"✅ Approved user {user_id}")
+    await context.bot.send_message(
+        chat_id=ADMIN_ID,
+        text=f"✅ Approved user {user_id}"
+    )
 
 # =====================
 # STATUS
@@ -218,7 +221,7 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 # =====================
-# MAIN (FIXED RENDER)
+# MAIN
 # =====================
 def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
@@ -234,7 +237,6 @@ def main():
 
     print("Bot running...")
 
-    # IMPORTANT FIX FOR RENDER
     app.run_polling(drop_pending_updates=True)
 
 if __name__ == "__main__":
