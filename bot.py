@@ -17,14 +17,19 @@ from telegram.ext import (
 # CONFIG
 # =====================
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
 
-QR_IMAGE = "qr.png"
-DB_FILE = "db.json"
+ADMIN_ID_RAW = os.getenv("ADMIN_ID")
 
 if not BOT_TOKEN:
     raise Exception("BOT_TOKEN is missing!")
 
+if not ADMIN_ID_RAW:
+    raise Exception("ADMIN_ID is missing!")
+
+try:
+    ADMIN_ID = int(ADMIN_ID_RAW)
+except:
+    raise Exception("ADMIN_ID must be a number (Telegram user ID)")
 # =====================
 # DB
 # =====================
