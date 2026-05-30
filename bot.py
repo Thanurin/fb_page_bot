@@ -2,9 +2,8 @@ import time
 import json
 import os
 import re
-import asyncio
 
-from telegram import Update, InputFile, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
@@ -75,19 +74,29 @@ async def free(update: Update, context: ContextTypes.DEFAULT_TYPE):
     save_db()
     await update.message.reply_text("🎉 FREE PLAN ACTIVATED (1 page)")
 
+# =====================
+# BUY (FIXED QR SEND)
+# =====================
 async def buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_photo(
-        photo=InputFile(QR_IMAGE),
-        caption=(
-            "💳 Pricing Plans:\n\n"
-            "💵 $8  → 10 Pages\n"
-            "💵 $15 → 20 Pages\n"
-            "💵 $20 → 30 Pages\n"
-            "💵 $50 → 80 Pages\n\n"
-            "📩 Send payment screenshot"
-        )
-    )
+    try:
+        with open(QR_IMAGE, "rb") as f:
+            await update.message.reply_photo(
+                photo=f,
+                caption=(
+                    "💳 Pricing Plans:\n\n"
+                    "💵 $8  → 10 Pages\n"
+                    "💵 $15 → 20 Pages\n"
+                    "💵 $20 → 30 Pages\n"
+                    "💵 $50 → 80 Pages\n\n"
+                    "📩 Send payment screenshot"
+                )
+            )
+    except Exception as e:
+        await update.message.reply_text(f"❌ QR error: {e}")
 
+# =====================
+# TEXT HANDLER
+# =====================
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.message.from_user.id)
     text = update.message.text
@@ -114,6 +123,9 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text("✅ Page saved")
 
+# =====================
+# PHOTO HANDLER
+# =====================
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
 
@@ -135,6 +147,9 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text("📩 Sent to admin")
 
+# =====================
+# APPROVE CALLBACK
+# =====================
 async def approve_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -169,6 +184,9 @@ async def approve_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await query.edit_message_text(f"✅ Approved user {user_id}")
 
+# =====================
+# STATUS
+# =====================
 async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.message.from_user.id)
 
@@ -188,9 +206,9 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 # =====================
-# FIXED MAIN FOR RENDER
+# MAIN (FIXED RENDER VERSION)
 # =====================
-async def main():
+def main():
     request = HTTPXRequest(connect_timeout=30, read_timeout=30)
 
     app = ApplicationBuilder().token(BOT_TOKEN).request(request).build()
@@ -206,13 +224,8 @@ async def main():
 
     print("Bot running on Render...")
 
-    await app.initialize()
-    await app.start()
-    await app.updater.start_polling()
-
-    # keep alive forever
-    while True:
-        await asyncio.sleep(3600)
+    # ✅ ONLY SAFE WAY ON RENDER
+    app.run_polling()
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
