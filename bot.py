@@ -76,7 +76,7 @@ async def free(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("🎉 FREE PLAN ACTIVATED (1 page)")
 
 # =====================
-# BUY (FIXED QR SAFE)
+# BUY (UPDATED PRICING)
 # =====================
 async def buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
@@ -85,10 +85,9 @@ async def buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 photo=f,
                 caption=(
                     "💳 Pricing Plans:\n\n"
-                    "💵 $8  → 10 Pages\n"
-                    "💵 $15 → 20 Pages\n"
-                    "💵 $20 → 30 Pages\n"
-                    "💵 $50 → 80 Pages\n\n"
+                    "💵 $3  → 10 Pages\n"
+                    "💵 $6  → 20 Pages\n"
+                    "💵 $12 → 30 Pages\n\n"
                     "📩 Send payment screenshot"
                 )
             )
@@ -131,10 +130,9 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
 
     keyboard = [
-        [InlineKeyboardButton("💵 $8 (10 pages)", callback_data=f"approve:{user.id}:8")],
-        [InlineKeyboardButton("💵 $15 (20 pages)", callback_data=f"approve:{user.id}:15")],
-        [InlineKeyboardButton("💵 $20 (30 pages)", callback_data=f"approve:{user.id}:20")],
-        [InlineKeyboardButton("🔥 $50 (80 pages)", callback_data=f"approve:{user.id}:50")],
+        [InlineKeyboardButton("💵 $3 (10 pages)", callback_data=f"approve:{user.id}:3")],
+        [InlineKeyboardButton("💵 $6 (20 pages)", callback_data=f"approve:{user.id}:6")],
+        [InlineKeyboardButton("💵 $12 (30 pages)", callback_data=f"approve:{user.id}:12")],
     ]
 
     markup = InlineKeyboardMarkup(keyboard)
@@ -161,7 +159,11 @@ async def approve_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     _, user_id, plan = query.data.split(":")
 
-    plan_map = {"8": 10, "15": 20, "20": 30, "50": 80}
+    plan_map = {
+        "3": 10,
+        "6": 20,
+        "12": 30
+    }
 
     if plan not in plan_map:
         await query.edit_message_text("❌ Invalid plan")
@@ -207,7 +209,7 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 # =====================
-# FIXED RENDER MAIN (NO CRASH)
+# MAIN (RENDER SAFE FIXED)
 # =====================
 async def main():
     request = HTTPXRequest(connect_timeout=30, read_timeout=30)
@@ -225,12 +227,10 @@ async def main():
 
     print("Bot running on Render...")
 
-    # ✅ SAFE START (NO run_polling, NO updater crash)
     await app.initialize()
     await app.start()
     await app.updater.start_polling()
 
-    # keep alive forever
     await asyncio.Event().wait()
 
 if __name__ == "__main__":
