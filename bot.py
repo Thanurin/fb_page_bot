@@ -17,7 +17,7 @@ from telegram.request import HTTPXRequest
 # CONFIG (SAFE)
 # =====================
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
+ADMIN_ID = int(os.getenv("ADMIN_ID"))
 QR_IMAGE = "qr.png"
 DB_FILE = "db.json"
 
