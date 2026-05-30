@@ -2,6 +2,7 @@ import time
 import json
 import os
 import re
+import asyncio
 
 from telegram import Update, InputFile, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -51,7 +52,7 @@ def is_facebook_link(text: str):
     return bool(re.match(r"https?://(www\.)?facebook\.com/.+", text))
 
 # =====================
-# START
+# HANDLERS
 # =====================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
@@ -61,9 +62,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "👉 /status - ស្ថានភាព"
     )
 
-# =====================
-# FREE PLAN
-# =====================
 async def free(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.message.from_user.id)
 
@@ -77,9 +75,6 @@ async def free(update: Update, context: ContextTypes.DEFAULT_TYPE):
     save_db()
     await update.message.reply_text("🎉 FREE PLAN ACTIVATED (1 page)")
 
-# =====================
-# BUY PLAN
-# =====================
 async def buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_photo(
         photo=InputFile(QR_IMAGE),
@@ -93,9 +88,6 @@ async def buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
     )
 
-# =====================
-# HANDLE TEXT
-# =====================
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.message.from_user.id)
     text = update.message.text
@@ -122,9 +114,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text("✅ Page saved")
 
-# =====================
-# PAYMENT PHOTO
-# =====================
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
 
@@ -146,9 +135,6 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text("📩 Sent to admin")
 
-# =====================
-# APPROVE BUTTON
-# =====================
 async def approve_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -159,12 +145,7 @@ async def approve_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     _, user_id, plan = query.data.split(":")
 
-    plan_map = {
-        "8": 10,
-        "15": 20,
-        "20": 30,
-        "50": 80
-    }
+    plan_map = {"8": 10, "15": 20, "20": 30, "50": 80}
 
     if plan not in plan_map:
         await query.edit_message_text("❌ Invalid plan")
@@ -186,11 +167,8 @@ async def approve_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         text=f"🎉 Approved!\n💳 ${plan}\n📌 Limit: {limit} pages"
     )
 
-    await query.edit_message_text(f"✅ Approved user {user_id} → ${plan}")
+    await query.edit_message_text(f"✅ Approved user {user_id}")
 
-# =====================
-# STATUS
-# =====================
 async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.message.from_user.id)
 
@@ -210,9 +188,9 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 # =====================
-# MAIN (ONLY THIS WORKS ON RENDER)
+# FIXED MAIN FOR RENDER
 # =====================
-def main():
+async def main():
     request = HTTPXRequest(connect_timeout=30, read_timeout=30)
 
     app = ApplicationBuilder().token(BOT_TOKEN).request(request).build()
@@ -224,13 +202,17 @@ def main():
 
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
-
     app.add_handler(CallbackQueryHandler(approve_callback))
 
     print("Bot running on Render...")
 
-    # 🔥 ONLY THIS
-    app.run_polling()
+    await app.initialize()
+    await app.start()
+    await app.updater.start_polling()
+
+    # keep alive forever
+    while True:
+        await asyncio.sleep(3600)
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
