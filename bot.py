@@ -124,7 +124,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("✅ Page saved")
 
 # =====================
-# PHOTO HANDLER
+# PHOTO HANDLER (ADMIN REVIEW)
 # =====================
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
@@ -135,19 +135,17 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("💵 $12 (30 pages)", callback_data=f"approve:{user.id}:12")],
     ]
 
-    markup = InlineKeyboardMarkup(keyboard)
-
     await context.bot.send_photo(
         chat_id=ADMIN_ID,
         photo=update.message.photo[-1].file_id,
         caption=f"💰 Payment from User ID: {user.id}",
-        reply_markup=markup
+        reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
     await update.message.reply_text("📩 Sent to admin")
 
 # =====================
-# APPROVE CALLBACK
+# APPROVE CALLBACK (FIXED + CONSISTENT)
 # =====================
 async def approve_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -159,6 +157,7 @@ async def approve_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     _, user_id, plan = query.data.split(":")
 
+    # ✅ FIXED PLAN MAPPING
     plan_map = {
         "3": 10,
         "6": 20,
@@ -185,7 +184,7 @@ async def approve_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         text=f"🎉 Approved!\n💳 ${plan}\n📌 Limit: {limit} pages"
     )
 
-    await query.edit_message_text(f"✅ Approved user {user_id}")
+    await query.edit_message_text(f"✅ Approved user {user_id} → ${plan}")
 
 # =====================
 # STATUS
