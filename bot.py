@@ -2,6 +2,7 @@ import time
 import json
 import os
 import re
+import asyncio
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -75,7 +76,7 @@ async def free(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("🎉 FREE PLAN ACTIVATED (1 page)")
 
 # =====================
-# BUY (FIXED QR SEND)
+# BUY (FIXED QR SAFE)
 # =====================
 async def buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
@@ -206,9 +207,9 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 # =====================
-# MAIN (FIXED RENDER VERSION)
+# FIXED RENDER MAIN (NO CRASH)
 # =====================
-def main():
+async def main():
     request = HTTPXRequest(connect_timeout=30, read_timeout=30)
 
     app = ApplicationBuilder().token(BOT_TOKEN).request(request).build()
@@ -224,8 +225,13 @@ def main():
 
     print("Bot running on Render...")
 
-    # ✅ ONLY SAFE WAY ON RENDER
-    app.run_polling()
+    # ✅ SAFE START (NO run_polling, NO updater crash)
+    await app.initialize()
+    await app.start()
+    await app.updater.start_polling()
+
+    # keep alive forever
+    await asyncio.Event().wait()
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
