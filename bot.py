@@ -2,7 +2,6 @@ import time
 import json
 import os
 import re
-import asyncio
 
 from telegram import Update, InputFile, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -95,7 +94,7 @@ async def buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 # =====================
-# HANDLE PAGE LINK
+# HANDLE TEXT
 # =====================
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.message.from_user.id)
@@ -124,7 +123,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("✅ Page saved")
 
 # =====================
-# PAYMENT SCREENSHOT → ADMIN
+# PAYMENT PHOTO
 # =====================
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
@@ -211,9 +210,9 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 # =====================
-# MAIN (RENDER FIX)
+# MAIN (ONLY THIS WORKS ON RENDER)
 # =====================
-async def main():
+def main():
     request = HTTPXRequest(connect_timeout=30, read_timeout=30)
 
     app = ApplicationBuilder().token(BOT_TOKEN).request(request).build()
@@ -230,10 +229,8 @@ async def main():
 
     print("Bot running on Render...")
 
-    await app.initialize()
-    await app.start()
-    await app.updater.start_polling()
-    await app.updater.idle()
+    # 🔥 ONLY THIS
+    app.run_polling()
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
