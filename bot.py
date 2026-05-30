@@ -1,6 +1,6 @@
-import time
-import json
 import os
+import json
+import time
 import re
 import asyncio
 
@@ -18,18 +18,12 @@ from telegram.ext import (
 # CONFIG
 # =====================
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-ADMIN_ID_RAW = os.getenv("ADMIN_ID")
+ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
 
-DB_FILE = "users.json"
-QR_IMAGE = "qr.png"
+DB_FILE = "db.json"
 
 if not BOT_TOKEN:
     raise Exception("BOT_TOKEN is missing!")
-
-if not ADMIN_ID_RAW:
-    raise Exception("ADMIN_ID is missing!")
-
-ADMIN_ID = int(ADMIN_ID_RAW)
 
 # =====================
 # DB
@@ -43,9 +37,9 @@ def load_db():
             return {}
     return {}
 
-def save_db(users):
+def save_db(data):
     with open(DB_FILE, "w") as f:
-        json.dump(users, f)
+        json.dump(data, f)
 
 users = load_db()
 
@@ -60,10 +54,10 @@ def is_facebook_link(text: str):
 # =====================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "សួស្តី! 🙏\n\n"
-        "👉 /free - FREE PLAN\n"
-        "👉 /buy - PREMIUM PLAN\n"
-        "👉 /status - STATUS"
+        "👋 Welcome!\n\n"
+        "/free - Free plan\n"
+        "/buy - Pricing\n"
+        "/status - Status"
     )
 
 # =====================
@@ -80,32 +74,20 @@ async def free(update: Update, context: ContextTypes.DEFAULT_TYPE):
     }
 
     save_db(users)
-    await update.message.reply_text("🎉 FREE PLAN ACTIVATED (1 page)")
+
+    await update.message.reply_text("🎉 Free plan activated (1 page)")
 
 # =====================
-# BUY PLAN
+# BUY
 # =====================
 async def buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    try:
-        with open(QR_IMAGE, "rb") as f:
-            await update.message.reply_photo(
-                photo=f,
-                caption=(
-                    "💳 Pricing Plans:\n\n"
-                    "💵 $3  → 10 Pages\n"
-                    "💵 $6  → 20 Pages\n"
-                    "💵 $12 → 30 Pages\n\n"
-                    "📩 Send payment screenshot"
-                )
-            )
-    except:
-        await update.message.reply_text(
-            "💳 Pricing Plans:\n\n"
-            "💵 $3  → 10 Pages\n"
-            "💵 $6  → 20 Pages\n"
-            "💵 $12 → 30 Pages\n\n"
-            "⚠ QR image not found"
-        )
+    await update.message.reply_text(
+        "💳 Pricing Plans:\n\n"
+        "$3 → 10 pages\n"
+        "$6 → 20 pages\n"
+        "$12 → 30 pages\n\n"
+        "Send payment screenshot 📩"
+    )
 
 # =====================
 # TEXT HANDLER
@@ -118,17 +100,17 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if user_id not in users:
-        await update.message.reply_text("សូមចុច /free មុនសិន")
+        await update.message.reply_text("Please use /free first")
         return
 
     user = users[user_id]
 
     if not is_facebook_link(text):
-        await update.message.reply_text("❌ សូមផ្ញើ Facebook link ត្រឹមត្រូវ")
+        await update.message.reply_text("❌ Invalid Facebook link")
         return
 
     if len(user["pages"]) >= user["limit"]:
-        await update.message.reply_text("❌ Limit reached. Upgrade plan!")
+        await update.message.reply_text("❌ Limit reached. Upgrade plan")
         return
 
     user["pages"].append(text)
@@ -137,7 +119,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("✅ Page saved")
 
 # =====================
-# PHOTO HANDLER (PAYMENT SEND TO ADMIN)
+# PHOTO HANDLER (PAYMENT PROOF)
 # =====================
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
@@ -151,14 +133,14 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_photo(
         chat_id=ADMIN_ID,
         photo=update.message.photo[-1].file_id,
-        caption=f"💰 Payment from User ID: {user.id}",
+        caption=f"💰 Payment from user {user.id}",
         reply_markup=InlineKeyboardMarkup(keyboard),
     )
 
     await update.message.reply_text("📩 Sent to admin")
 
 # =====================
-# APPROVE CALLBACK (FIXED SAFE)
+# APPROVE PAYMENT
 # =====================
 async def approve_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -175,34 +157,27 @@ async def approve_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     plan_map = {
         "3": 10,
         "6": 20,
-        "12": 30
+        "12": 30,
     }
 
     if plan not in plan_map:
-        await query.message.reply_text("❌ Invalid plan")
         return
-
-    limit = plan_map[plan]
 
     users[user_id] = {
         "plan": plan,
-        "limit": limit,
+        "limit": plan_map[plan],
         "expire": time.time() + 365 * 86400,
-        "pages": []
+        "pages": [],
     }
 
     save_db(users)
 
-    # notify user safely
-    try:
-        await context.bot.send_message(
-            chat_id=int(user_id),
-            text=f"🎉 Approved!\n💳 ${plan}\n📌 Limit: {limit} pages"
-        )
-    except:
-        pass
+    await context.bot.send_message(
+        chat_id=int(user_id),
+        text=f"🎉 Approved!\n💳 Plan: ${plan}\n📄 Limit: {plan_map[plan]} pages",
+    )
 
-    await query.message.reply_text(f"✅ Approved user {user_id}")
+    await query.message.reply_text("✅ Approved")
 
 # =====================
 # STATUS
@@ -216,19 +191,15 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user = users[user_id]
 
-    if user["expire"] < time.time():
-        await update.message.reply_text("❌ Expired! /buy")
-        return
-
     await update.message.reply_text(
         f"📌 Plan: ${user['plan']}\n"
         f"📄 Pages: {len(user['pages'])}/{user['limit']}"
     )
 
 # =====================
-# MAIN (RENDER FIXED + PYTHON 3.14 SAFE)
+# MAIN (RENDER SAFE)
 # =====================
-def main():
+async def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
@@ -242,13 +213,7 @@ def main():
 
     print("Bot running...")
 
-    async def run():
-        await app.initialize()
-        await app.start()
-        await app.updater.start_polling(drop_pending_updates=True)
-        await asyncio.Event().wait()
-
-    asyncio.run(run())
+    await app.run_polling()
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
