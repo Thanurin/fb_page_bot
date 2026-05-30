@@ -237,7 +237,7 @@ def main():
     print("Bot running on Render...")
 
     # IMPORTANT: correct way for Render
-    app.run_polling(drop_pending_updates=True)
+    app.run_polling()
 
 if __name__ == "__main__":
     main()
