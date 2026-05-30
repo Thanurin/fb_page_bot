@@ -12,6 +12,7 @@ from telegram.ext import (
     ContextTypes,
     filters,
 )
+
 from telegram.request import HTTPXRequest
 
 # =====================
@@ -28,7 +29,7 @@ if not BOT_TOKEN:
     raise Exception("BOT_TOKEN is missing!")
 
 # =====================
-# DB
+# DB SYSTEM
 # =====================
 def load_db():
     if os.path.exists(DB_FILE):
@@ -57,7 +58,7 @@ def is_facebook_link(text: str):
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "សួស្តី! 🙏\n\n"
-        "👉 /free - FREE PLAN\n"
+        "👉 /free - FREE PLAN (1 page)\n"
         "👉 /buy - PREMIUM PLAN\n"
         "👉 /status - ស្ថានភាព"
     )
@@ -80,7 +81,7 @@ async def free(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("🎉 FREE PLAN ACTIVATED (1 page)")
 
 # =====================
-# BUY PLAN
+# BUY PLAN (YOUR PRICING)
 # =====================
 async def buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_photo(
@@ -96,7 +97,7 @@ async def buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 # =====================
-# HANDLE PAGE LINK
+# HANDLE FACEBOOK PAGE
 # =====================
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.message.from_user.id)
@@ -115,9 +116,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ សូមផ្ញើ Facebook link ត្រឹមត្រូវ")
         return
 
-    limit = user["limit"]
-
-    if limit != -1 and len(user["pages"]) >= limit:
+    if len(user["pages"]) >= user["limit"]:
         await update.message.reply_text("❌ Limit reached. Upgrade plan!")
         return
 
@@ -127,24 +126,16 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("✅ Page saved")
 
 # =====================
-# PAYMENT SCREENSHOT (SEND TO ADMIN WITH BUTTONS)
+# PAYMENT SCREENSHOT → ADMIN BUTTONS
 # =====================
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
 
     keyboard = [
-        [
-            InlineKeyboardButton("✅ $8 (10 pages)", callback_data=f"approve:{user.id}:8"),
-        ],
-        [
-            InlineKeyboardButton("✅ $15 (20 pages)", callback_data=f"approve:{user.id}:15"),
-        ],
-        [
-            InlineKeyboardButton("✅ $20 (30 pages)", callback_data=f"approve:{user.id}:20"),
-        ],
-        [
-            InlineKeyboardButton("🔥 $50 (80 pages)", callback_data=f"approve:{user.id}:50"),
-        ],
+        [InlineKeyboardButton("💵 $8 (10 pages)", callback_data=f"approve:{user.id}:8")],
+        [InlineKeyboardButton("💵 $15 (20 pages)", callback_data=f"approve:{user.id}:15")],
+        [InlineKeyboardButton("💵 $20 (30 pages)", callback_data=f"approve:{user.id}:20")],
+        [InlineKeyboardButton("🔥 $50 (80 pages)", callback_data=f"approve:{user.id}:50")],
     ]
 
     markup = InlineKeyboardMarkup(keyboard)
@@ -183,11 +174,10 @@ async def approve_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "50": 80
     }
 
-    if plan not in plan_map:
+    limit = plan_map.get(plan)
+    if not limit:
         await query.edit_message_text("❌ Invalid plan")
         return
-
-    limit = plan_map[plan]
 
     users[user_id] = {
         "plan": plan,
@@ -227,7 +217,7 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 # =====================
-# MAIN (RENDER FIX)
+# MAIN (RENDER SAFE - FIXED)
 # =====================
 def main():
     request = HTTPXRequest(connect_timeout=30, read_timeout=30)
@@ -246,6 +236,7 @@ def main():
 
     print("Bot running on Render...")
 
+    # IMPORTANT: correct way for Render
     app.run_polling(drop_pending_updates=True)
 
 if __name__ == "__main__":
