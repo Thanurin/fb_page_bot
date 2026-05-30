@@ -2,6 +2,7 @@ import time
 import json
 import os
 import re
+import asyncio
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -19,9 +20,8 @@ from telegram.ext import (
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID_RAW = os.getenv("ADMIN_ID")
 
-# 🔥 FIXED MISSING VARIABLES
 DB_FILE = "users.json"
-QR_IMAGE = "qr.png"  # put your QR image in project folder
+QR_IMAGE = "qr.png"
 
 if not BOT_TOKEN:
     raise Exception("BOT_TOKEN is missing!")
@@ -83,7 +83,7 @@ async def free(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("🎉 FREE PLAN ACTIVATED (1 page)")
 
 # =====================
-# BUY (YOUR NEW PRICES)
+# BUY PLAN
 # =====================
 async def buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
@@ -98,13 +98,13 @@ async def buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     "📩 Send payment screenshot"
                 )
             )
-    except Exception as e:
+    except:
         await update.message.reply_text(
             "💳 Pricing Plans:\n\n"
             "💵 $3  → 10 Pages\n"
             "💵 $6  → 20 Pages\n"
             "💵 $12 → 30 Pages\n\n"
-            "⚠ QR image missing or error"
+            "⚠ QR image not found"
         )
 
 # =====================
@@ -137,7 +137,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("✅ Page saved")
 
 # =====================
-# PHOTO HANDLER
+# PHOTO HANDLER (PAYMENT SEND TO ADMIN)
 # =====================
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
@@ -148,19 +148,17 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("$12 (30 pages)", callback_data=f"approve:{user.id}:12")],
     ]
 
-    markup = InlineKeyboardMarkup(keyboard)
-
     await context.bot.send_photo(
         chat_id=ADMIN_ID,
         photo=update.message.photo[-1].file_id,
         caption=f"💰 Payment from User ID: {user.id}",
-        reply_markup=markup
+        reply_markup=InlineKeyboardMarkup(keyboard),
     )
 
     await update.message.reply_text("📩 Sent to admin")
 
 # =====================
-# APPROVE CALLBACK (SAFE FIXED)
+# APPROVE CALLBACK (FIXED SAFE)
 # =====================
 async def approve_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -195,7 +193,7 @@ async def approve_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     save_db(users)
 
-    # SAFE SEND USER MESSAGE
+    # notify user safely
     try:
         await context.bot.send_message(
             chat_id=int(user_id),
@@ -228,7 +226,7 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 # =====================
-# MAIN (RENDER SAFE)
+# MAIN (RENDER FIXED + PYTHON 3.14 SAFE)
 # =====================
 def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
@@ -244,8 +242,13 @@ def main():
 
     print("Bot running...")
 
-    # IMPORTANT FIX FOR RENDER
-    app.run_polling(drop_pending_updates=True)
+    async def run():
+        await app.initialize()
+        await app.start()
+        await app.updater.start_polling(drop_pending_updates=True)
+        await asyncio.Event().wait()
+
+    asyncio.run(run())
 
 if __name__ == "__main__":
     main()
