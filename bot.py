@@ -2,10 +2,7 @@ import os
 import json
 import time
 import re
-import threading
-import asyncio
 
-from aiohttp import web
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     ApplicationBuilder,
@@ -19,7 +16,6 @@ from telegram.ext import (
 # ================= CONFIG =================
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
-PORT = int(os.getenv("PORT", 10000))
 
 DB_FILE = "db.json"
 
@@ -46,21 +42,20 @@ users = load_db()
 def is_facebook_link(text: str):
     return bool(re.match(r"https?://(www\.)?facebook\.com/.+", text))
 
-# ================= AUTO EXPIRE CHECK =================
-def check_expired(user):
-    if "expire" in user and time.time() > user["expire"]:
-        return True
-    return False
+# ================= EXPIRE CHECK =================
+def is_expired(user):
+    return "expire" in user and time.time() > user["expire"]
 
-# ================= KHMER ONLY RESPONSES =================
-MSG_START = "👋 សួស្តី!\n\n/free - គម្រោងឥតគិតថ្លៃ\n/buy - តម្លៃគម្រោង\n/status - ស្ថានភាព"
-MSG_FREE = "🎉 អ្នកបានបើកគម្រោងឥតគិតថ្លៃ (១ page)"
-MSG_BUY = "💳 តម្លៃគម្រោង៖\n\n$3 → 10 pages\n$6 → 20 pages\n$12 → 30 pages\n\nផ្ញើរូបបង់ប្រាក់មក 📩"
-
-# ================= HANDLERS =================
+# ================= START =================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(MSG_START)
+    await update.message.reply_text(
+        "👋 សួស្តី!\n\n"
+        "/free - គម្រោងឥតគិតថ្លៃ\n"
+        "/buy - តម្លៃគម្រោង\n"
+        "/status - ស្ថានភាព"
+    )
 
+# ================= FREE =================
 async def free(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.message.from_user.id)
 
@@ -72,11 +67,20 @@ async def free(update: Update, context: ContextTypes.DEFAULT_TYPE):
     }
 
     save_db(users)
-    await update.message.reply_text(MSG_FREE)
 
+    await update.message.reply_text("🎉 អ្នកបានបើកគម្រោងឥតគិតថ្លៃ (1 page)")
+
+# ================= BUY =================
 async def buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(MSG_BUY)
+    await update.message.reply_text(
+        "💳 តម្លៃគម្រោង៖\n\n"
+        "$3 → 10 pages\n"
+        "$6 → 20 pages\n"
+        "$12 → 30 pages\n\n"
+        "ផ្ញើរូបភាពបង់ប្រាក់មក 📩"
+    )
 
+# ================= STATUS =================
 async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.message.from_user.id)
 
@@ -85,17 +89,17 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user = users[user_id]
 
-    # ❗ CHECK EXPIRE HERE
-    if check_expired(user):
+    if is_expired(user):
         del users[user_id]
         save_db(users)
-        return await update.message.reply_text("⛔ គម្រោងរបស់អ្នកបានផុតកំណត់")
+        return await update.message.reply_text("⛔ គម្រោងផុតកំណត់")
 
     await update.message.reply_text(
         f"📌 គម្រោង: {user['plan']}\n"
         f"📄 ចំនួន: {len(user['pages'])}/{user['limit']}"
     )
 
+# ================= TEXT HANDLER =================
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.message.from_user.id)
     text = update.message.text
@@ -108,8 +112,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user = users[user_id]
 
-    # ❗ EXPIRE CHECK
-    if check_expired(user):
+    if is_expired(user):
         del users[user_id]
         save_db(users)
         return await update.message.reply_text("⛔ គម្រោងផុតកំណត់")
@@ -125,14 +128,65 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text("✅ បានរក្សាទុករួចហើយ")
 
+# ================= PHOTO (PAYMENT) =================
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("📩 បានទទួលការបង់ប្រាក់")
+    user = update.message.from_user
 
+    keyboard = [
+        [InlineKeyboardButton("$3 (10 pages)", callback_data=f"approve:{user.id}:3")],
+        [InlineKeyboardButton("$6 (20 pages)", callback_data=f"approve:{user.id}:6")],
+        [InlineKeyboardButton("$12 (30 pages)", callback_data=f"approve:{user.id}:12")],
+    ]
+
+    await context.bot.send_photo(
+        chat_id=ADMIN_ID,
+        photo=update.message.photo[-1].file_id,
+        caption=f"💰 Payment ពី user {user.id}",
+        reply_markup=InlineKeyboardMarkup(keyboard),
+    )
+
+    await update.message.reply_text("📩 បានផ្ញើទៅ admin ហើយ")
+
+# ================= ADMIN APPROVE =================
 async def approve_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.callback_query.answer()
+    query = update.callback_query
+    await query.answer()
 
-# ================= BOT =================
-def run_bot():
+    if query.from_user.id != ADMIN_ID:
+        return
+
+    try:
+        _, user_id, plan = query.data.split(":")
+    except:
+        return
+
+    plan_map = {
+        "3": 10,
+        "6": 20,
+        "12": 30,
+    }
+
+    if plan not in plan_map:
+        return
+
+    users[user_id] = {
+        "plan": plan,
+        "limit": plan_map[plan],
+        "expire": time.time() + 365 * 86400,
+        "pages": [],
+    }
+
+    save_db(users)
+
+    await context.bot.send_message(
+        chat_id=int(user_id),
+        text=f"🎉 អនុម័តរួចហើយ!\n💳 Plan: ${plan}\n📄 Limit: {plan_map[plan]} pages",
+    )
+
+    await query.message.reply_text("✅ Approved")
+
+# ================= MAIN (SAFE FOR RENDER) =================
+def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
@@ -144,27 +198,11 @@ def run_bot():
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     app.add_handler(CallbackQueryHandler(approve_callback))
 
-    print("🚀 Bot running in Khmer mode only...")
+    print("🚀 Bot running safely on polling mode")
+
+    # ✅ ONLY THIS (NO async, NO threads, NO webhook)
     app.run_polling(drop_pending_updates=True)
 
-# ================= WEB SERVER =================
-async def home(request):
-    return web.Response(text="Bot is running")
 
-def start_web():
-    web_app = web.Application()
-    web_app.router.add_get("/", home)
-
-    runner = web.AppRunner(web_app)
-
-    async def _run():
-        await runner.setup()
-        site = web.TCPSite(runner, "0.0.0.0", PORT)
-        await site.start()
-
-    asyncio.get_event_loop().run_until_complete(_run())
-
-# ================= MAIN =================
 if __name__ == "__main__":
-    threading.Thread(target=run_bot).start()
-    start_web()
+    main()
