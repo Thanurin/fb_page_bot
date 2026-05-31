@@ -2,6 +2,13 @@ import os
 import json
 import time
 import re
+import asyncio
+
+# 🔥 FIX for Render + Python 3.14 asyncio bug
+try:
+    asyncio.get_event_loop()
+except RuntimeError:
+    asyncio.set_event_loop(asyncio.new_event_loop())
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -148,7 +155,7 @@ async def approve(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await q.message.reply_text("Done")
 
-# ================= MAIN (ONLY SAFE METHOD) =================
+# ================= MAIN (FIXED FOR RENDER) =================
 def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
@@ -162,6 +169,7 @@ def main():
 
     print("Bot running...")
 
+    # 🔥 SAFE MODE FOR RENDER (NO asyncio crash)
     app.run_polling(drop_pending_updates=True)
 
 
