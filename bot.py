@@ -197,23 +197,46 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 # =====================
-# MAIN (RENDER SAFE)
+
+# MAIN (FIXED)
+
 # =====================
-async def main():
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
 
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("free", free))
-    app.add_handler(CommandHandler("buy", buy))
-    app.add_handler(CommandHandler("status", status))
+def main():
+app = ApplicationBuilder().token(BOT_TOKEN).build()
 
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
-    app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
-    app.add_handler(CallbackQueryHandler(approve_callback))
+```
+app.add_handler(CommandHandler("start", start))
+app.add_handler(CommandHandler("free", free))
+app.add_handler(CommandHandler("buy", buy))
+app.add_handler(CommandHandler("status", status))
 
-    print("Bot running...")
+app.add_handler(
+    MessageHandler(
+        filters.TEXT & ~filters.COMMAND,
+        handle_text
+    )
+)
 
-    await app.run_polling()
+app.add_handler(
+    MessageHandler(
+        filters.PHOTO,
+        handle_photo
+    )
+)
 
-if __name__ == "__main__":
-    asyncio.run(main())
+app.add_handler(
+    CallbackQueryHandler(
+        approve_callback
+    )
+)
+
+print("Bot running...")
+
+app.run_polling(
+    drop_pending_updates=True
+)
+```
+
+if **name** == "**main**":
+main()
