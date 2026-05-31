@@ -213,8 +213,5 @@ def main():
 
     print("Bot running...")
 
-    # 🔥 IMPORTANT FIX FOR RENDER WEB SERVICE
+    # SIMPLE AND STABLE (NO asyncio, NO tricks)
     app.run_polling(drop_pending_updates=True)
-
-if __name__ == "__main__":
-    main()
