@@ -42,18 +42,12 @@ users = load_db()
 def is_facebook_link(text: str):
     return bool(re.match(r"https?://(www\.)?facebook\.com/.+", text))
 
-# ================= EXPIRE CHECK =================
-def is_expired(user):
+def expired(user):
     return "expire" in user and time.time() > user["expire"]
 
 # ================= START =================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "👋 សួស្តី!\n\n"
-        "/free - គម្រោងឥតគិតថ្លៃ\n"
-        "/buy - តម្លៃគម្រោង\n"
-        "/status - ស្ថានភាព"
-    )
+    await update.message.reply_text("👋 សួស្តី! (/free /buy /status)")
 
 # ================= FREE =================
 async def free(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -67,39 +61,18 @@ async def free(update: Update, context: ContextTypes.DEFAULT_TYPE):
     }
 
     save_db(users)
-
-    await update.message.reply_text("🎉 អ្នកបានបើកគម្រោងឥតគិតថ្លៃ (1 page)")
+    await update.message.reply_text("🎉 Free plan activated (1 page)")
 
 # ================= BUY =================
 async def buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "💳 តម្លៃគម្រោង៖\n\n"
+        "💳 Plans:\n"
         "$3 → 10 pages\n"
         "$6 → 20 pages\n"
-        "$12 → 30 pages\n\n"
-        "ផ្ញើរូបភាពបង់ប្រាក់មក 📩"
+        "$12 → 30 pages"
     )
 
-# ================= STATUS =================
-async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = str(update.message.from_user.id)
-
-    if user_id not in users:
-        return await update.message.reply_text("❌ អ្នកមិនទាន់មានគម្រោង")
-
-    user = users[user_id]
-
-    if is_expired(user):
-        del users[user_id]
-        save_db(users)
-        return await update.message.reply_text("⛔ គម្រោងផុតកំណត់")
-
-    await update.message.reply_text(
-        f"📌 គម្រោង: {user['plan']}\n"
-        f"📄 ចំនួន: {len(user['pages'])}/{user['limit']}"
-    )
-
-# ================= TEXT HANDLER =================
+# ================= TEXT =================
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.message.from_user.id)
     text = update.message.text
@@ -108,99 +81,87 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if user_id not in users:
-        return await update.message.reply_text("⚠️ សូមប្រើ /free មុនសិន")
+        return await update.message.reply_text("Use /free first")
 
     user = users[user_id]
 
-    if is_expired(user):
+    if expired(user):
         del users[user_id]
         save_db(users)
-        return await update.message.reply_text("⛔ គម្រោងផុតកំណត់")
+        return await update.message.reply_text("Plan expired")
 
     if not is_facebook_link(text):
-        return await update.message.reply_text("❌ Link Facebook មិនត្រឹមត្រូវ")
+        return await update.message.reply_text("Invalid Facebook link")
 
     if len(user["pages"]) >= user["limit"]:
-        return await update.message.reply_text("❌ អស់ចំនួនហើយ")
+        return await update.message.reply_text("Limit reached")
 
     user["pages"].append(text)
     save_db(users)
 
-    await update.message.reply_text("✅ បានរក្សាទុករួចហើយ")
+    await update.message.reply_text("Saved")
 
-# ================= PHOTO (PAYMENT) =================
+# ================= PHOTO =================
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
 
     keyboard = [
-        [InlineKeyboardButton("$3 (10 pages)", callback_data=f"approve:{user.id}:3")],
-        [InlineKeyboardButton("$6 (20 pages)", callback_data=f"approve:{user.id}:6")],
-        [InlineKeyboardButton("$12 (30 pages)", callback_data=f"approve:{user.id}:12")],
+        [InlineKeyboardButton("$3", callback_data=f"approve:{user.id}:3")],
+        [InlineKeyboardButton("$6", callback_data=f"approve:{user.id}:6")],
+        [InlineKeyboardButton("$12", callback_data=f"approve:{user.id}:12")],
     ]
 
     await context.bot.send_photo(
         chat_id=ADMIN_ID,
         photo=update.message.photo[-1].file_id,
-        caption=f"💰 Payment ពី user {user.id}",
+        caption=f"Payment from {user.id}",
         reply_markup=InlineKeyboardMarkup(keyboard),
     )
 
-    await update.message.reply_text("📩 បានផ្ញើទៅ admin ហើយ")
+    await update.message.reply_text("Sent to admin")
 
-# ================= ADMIN APPROVE =================
-async def approve_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
+# ================= APPROVE =================
+async def approve(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    await q.answer()
 
-    if query.from_user.id != ADMIN_ID:
+    if q.from_user.id != ADMIN_ID:
         return
 
-    try:
-        _, user_id, plan = query.data.split(":")
-    except:
-        return
+    _, user_id, plan = q.data.split(":")
 
-    plan_map = {
-        "3": 10,
-        "6": 20,
-        "12": 30,
-    }
-
-    if plan not in plan_map:
-        return
+    plans = {"3": 10, "6": 20, "12": 30}
 
     users[user_id] = {
         "plan": plan,
-        "limit": plan_map[plan],
+        "limit": plans[plan],
         "expire": time.time() + 365 * 86400,
-        "pages": [],
+        "pages": []
     }
 
     save_db(users)
 
     await context.bot.send_message(
         chat_id=int(user_id),
-        text=f"🎉 អនុម័តរួចហើយ!\n💳 Plan: ${plan}\n📄 Limit: {plan_map[plan]} pages",
+        text=f"Approved: ${plan} plan"
     )
 
-    await query.message.reply_text("✅ Approved")
+    await q.message.reply_text("Done")
 
-# ================= MAIN (SAFE FOR RENDER) =================
+# ================= MAIN (ONLY SAFE METHOD) =================
 def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("free", free))
     app.add_handler(CommandHandler("buy", buy))
-    app.add_handler(CommandHandler("status", status))
 
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
-    app.add_handler(CallbackQueryHandler(approve_callback))
+    app.add_handler(CallbackQueryHandler(approve))
 
-    print("🚀 Bot running safely on polling mode")
+    print("Bot running...")
 
-    # ✅ ONLY THIS (NO async, NO threads, NO webhook)
     app.run_polling(drop_pending_updates=True)
 
 
