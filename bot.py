@@ -19,7 +19,7 @@ from telegram.ext import (
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
 PORT = int(os.getenv("PORT", 10000))
-WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # https://your-app.onrender.com/webhook
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 
 DB_FILE = "db.json"
 
@@ -66,14 +66,26 @@ async def free(update: Update, context: ContextTypes.DEFAULT_TYPE):
     save_db(users)
     await update.message.reply_text("🎉 Free plan activated (1 page)")
 
+# ================= BUY (UPDATED WITH QR) =================
 async def buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "💳 Plans:\n"
+    keyboard = [
+        [InlineKeyboardButton("$3 → 10 pages", callback_data="buy:3")],
+        [InlineKeyboardButton("$6 → 20 pages", callback_data="buy:6")],
+        [InlineKeyboardButton("$12 → 30 pages", callback_data="buy:12")],
+    ]
+
+    await update.message.reply_photo(
+        photo=open("qr.png", "rb"),
+        caption=
+        "💳 តម្លៃគម្រោង៖\n\n"
         "$3 → 10 pages\n"
         "$6 → 20 pages\n"
-        "$12 → 30 pages"
+        "$12 → 30 pages\n\n"
+        "📩 Scan QR ដើម្បីបង់ប្រាក់",
+        reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
+# ================= TEXT =================
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.message.from_user.id)
     text = update.message.text
@@ -102,6 +114,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text("✅ បានរក្សាទុករួចហើយ")
 
+# ================= PHOTO =================
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
 
@@ -120,6 +133,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text("📩 បានផ្ញើទៅ admin")
 
+# ================= APPROVE =================
 async def approve(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
