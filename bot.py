@@ -196,7 +196,7 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 # =====================
-# MAIN
+# MAIN (FIXED FOR RENDER)
 # =====================
 def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
@@ -212,7 +212,11 @@ def main():
 
     print("Bot running...")
 
-    app.run_polling(drop_pending_updates=True, allowed_updates=Update.ALL_TYPES)
+    # 🔥 IMPORTANT FIX:
+    # DO NOT use asyncio.run OR allowed_updates
+    app.run_polling(
+        drop_pending_updates=True
+    )
 
 if __name__ == "__main__":
     main()
