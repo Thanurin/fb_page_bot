@@ -2,7 +2,6 @@ import os
 import json
 import time
 import re
-import asyncio
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -50,7 +49,7 @@ def is_facebook_link(text: str):
     return bool(re.match(r"https?://(www\.)?facebook\.com/.+", text))
 
 # =====================
-# START
+# START (KHMER)
 # =====================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
@@ -149,10 +148,7 @@ async def approve_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if query.from_user.id != ADMIN_ID:
         return
 
-    try:
-        _, user_id, plan = query.data.split(":")
-    except:
-        return
+    _, user_id, plan = query.data.split(":")
 
     plan_map = {
         "3": 10,
@@ -197,7 +193,7 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 # =====================
-# MAIN (FIXED FOR RENDER WEB SERVICE)
+# MAIN (FIXED FOR RENDER)
 # =====================
 def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
@@ -213,5 +209,8 @@ def main():
 
     print("Bot running...")
 
-    # SIMPLE AND STABLE (NO asyncio, NO tricks)
+    # 🔥 IMPORTANT: simple polling (NO asyncio, NO web server)
     app.run_polling(drop_pending_updates=True)
+
+if __name__ == "__main__":
+    main()
