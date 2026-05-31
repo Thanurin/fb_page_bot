@@ -198,6 +198,8 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # =====================
 # MAIN (FINAL FIX FOR RENDER)
 # =====================
+import asyncio
+
 def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
@@ -212,8 +214,15 @@ def main():
 
     print("Bot running...")
 
-    # ✅ SAFE FOR RENDER (NO asyncio conflict)
-    app.run_polling(drop_pending_updates=True)
+    async def run():
+        await app.initialize()
+        await app.start()
+        await app.updater.start_polling(drop_pending_updates=True)
+
+        # keep alive forever
+        await asyncio.Event().wait()
+
+    asyncio.run(run())
 
 if __name__ == "__main__":
     main()
