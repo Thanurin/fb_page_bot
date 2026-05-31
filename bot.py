@@ -2,6 +2,7 @@ import os
 import json
 import time
 import re
+import asyncio
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -196,10 +197,8 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 # =====================
-# MAIN (FINAL FIX FOR RENDER)
+# MAIN (FIXED FOR RENDER WEB SERVICE)
 # =====================
-import asyncio
-
 def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
@@ -214,15 +213,8 @@ def main():
 
     print("Bot running...")
 
-    async def run():
-        await app.initialize()
-        await app.start()
-        await app.updater.start_polling(drop_pending_updates=True)
-
-        # keep alive forever
-        await asyncio.Event().wait()
-
-    asyncio.run(run())
+    # 🔥 IMPORTANT FIX FOR RENDER WEB SERVICE
+    app.run_polling(drop_pending_updates=True)
 
 if __name__ == "__main__":
     main()
