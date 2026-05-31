@@ -2,7 +2,6 @@ import os
 import json
 import time
 import re
-import asyncio
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -195,48 +194,24 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"📌 Plan: ${user['plan']}\n"
         f"📄 Pages: {len(user['pages'])}/{user['limit']}"
     )
-
 # =====================
-
-# MAIN (FIXED)
-
+# MAIN
 # =====================
-
 def main():
-app = ApplicationBuilder().token(BOT_TOKEN).build()
+    app = ApplicationBuilder().token(BOT_TOKEN).build()
 
-```
-app.add_handler(CommandHandler("start", start))
-app.add_handler(CommandHandler("free", free))
-app.add_handler(CommandHandler("buy", buy))
-app.add_handler(CommandHandler("status", status))
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("free", free))
+    app.add_handler(CommandHandler("buy", buy))
+    app.add_handler(CommandHandler("status", status))
 
-app.add_handler(
-    MessageHandler(
-        filters.TEXT & ~filters.COMMAND,
-        handle_text
-    )
-)
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
+    app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
+    app.add_handler(CallbackQueryHandler(approve_callback))
 
-app.add_handler(
-    MessageHandler(
-        filters.PHOTO,
-        handle_photo
-    )
-)
+    print("Bot running...")
 
-app.add_handler(
-    CallbackQueryHandler(
-        approve_callback
-    )
-)
+    app.run_polling(drop_pending_updates=True)
 
-print("Bot running...")
-
-app.run_polling(
-    drop_pending_updates=True
-)
-```
-
-if **name** == "**main**":
-main()
+if __name__ == "__main__":
+    main()
