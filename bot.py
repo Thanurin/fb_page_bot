@@ -4,12 +4,7 @@ import time
 import re
 import asyncio
 
-# 🔥 FIX for Render + Python 3.14 asyncio bug
-try:
-    asyncio.get_event_loop()
-except RuntimeError:
-    asyncio.set_event_loop(asyncio.new_event_loop())
-
+from aiohttp import web
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     ApplicationBuilder,
@@ -23,6 +18,8 @@ from telegram.ext import (
 # ================= CONFIG =================
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
+PORT = int(os.getenv("PORT", 10000))
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # https://your-app.onrender.com/webhook
 
 DB_FILE = "db.json"
 
@@ -52,11 +49,10 @@ def is_facebook_link(text: str):
 def expired(user):
     return "expire" in user and time.time() > user["expire"]
 
-# ================= START =================
+# ================= HANDLERS =================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("👋 សួស្តី! (/free /buy /status)")
 
-# ================= FREE =================
 async def free(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.message.from_user.id)
 
@@ -70,7 +66,6 @@ async def free(update: Update, context: ContextTypes.DEFAULT_TYPE):
     save_db(users)
     await update.message.reply_text("🎉 Free plan activated (1 page)")
 
-# ================= BUY =================
 async def buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "💳 Plans:\n"
@@ -79,7 +74,6 @@ async def buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "$12 → 30 pages"
     )
 
-# ================= TEXT =================
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.message.from_user.id)
     text = update.message.text
@@ -88,27 +82,26 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if user_id not in users:
-        return await update.message.reply_text("Use /free first")
+        return await update.message.reply_text("សូមប្រើ /free ជាមុនសិន")
 
     user = users[user_id]
 
     if expired(user):
         del users[user_id]
         save_db(users)
-        return await update.message.reply_text("Plan expired")
+        return await update.message.reply_text("❌ Plan បានផុតកំណត់")
 
     if not is_facebook_link(text):
-        return await update.message.reply_text("Invalid Facebook link")
+        return await update.message.reply_text("❌ Link Facebook មិនត្រឹមត្រូវ")
 
     if len(user["pages"]) >= user["limit"]:
-        return await update.message.reply_text("Limit reached")
+        return await update.message.reply_text("❌ អស់ limit ហើយ")
 
     user["pages"].append(text)
     save_db(users)
 
-    await update.message.reply_text("Saved")
+    await update.message.reply_text("✅ បានរក្សាទុករួចហើយ")
 
-# ================= PHOTO =================
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
 
@@ -121,13 +114,12 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_photo(
         chat_id=ADMIN_ID,
         photo=update.message.photo[-1].file_id,
-        caption=f"Payment from {user.id}",
+        caption=f"💰 Payment ពី {user.id}",
         reply_markup=InlineKeyboardMarkup(keyboard),
     )
 
-    await update.message.reply_text("Sent to admin")
+    await update.message.reply_text("📩 បានផ្ញើទៅ admin")
 
-# ================= APPROVE =================
 async def approve(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
@@ -150,28 +142,51 @@ async def approve(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await context.bot.send_message(
         chat_id=int(user_id),
-        text=f"Approved: ${plan} plan"
+        text=f"🎉 Approved: ${plan} plan"
     )
 
-    await q.message.reply_text("Done")
+    await q.message.reply_text("✅ Done")
 
-# ================= MAIN (FIXED FOR RENDER) =================
-def main():
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
+# ================= BOT APP =================
+app = ApplicationBuilder().token(BOT_TOKEN).build()
 
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("free", free))
-    app.add_handler(CommandHandler("buy", buy))
+app.add_handler(CommandHandler("start", start))
+app.add_handler(CommandHandler("free", free))
+app.add_handler(CommandHandler("buy", buy))
 
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
-    app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
-    app.add_handler(CallbackQueryHandler(approve))
+app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
+app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
+app.add_handler(CallbackQueryHandler(approve))
 
-    print("Bot running...")
+# ================= WEBHOOK SERVER =================
+async def webhook(request):
+    data = await request.json()
+    update = Update.de_json(data, app.bot)
+    await app.process_update(update)
+    return web.Response(text="ok")
 
-    # 🔥 SAFE MODE FOR RENDER (NO asyncio crash)
-    app.run_polling(drop_pending_updates=True)
+async def health(request):
+    return web.Response(text="Bot is running")
 
+async def main():
+    await app.initialize()
+    await app.start()
+
+    await app.bot.set_webhook(WEBHOOK_URL)
+
+    web_app = web.Application()
+    web_app.router.add_post("/webhook", webhook)
+    web_app.router.add_get("/", health)
+
+    runner = web.AppRunner(web_app)
+    await runner.setup()
+
+    site = web.TCPSite(runner, "0.0.0.0", PORT)
+    await site.start()
+
+    print("🚀 Webhook bot running")
+
+    await asyncio.Event().wait()
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
