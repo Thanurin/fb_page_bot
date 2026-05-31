@@ -17,12 +17,18 @@ from telegram.ext import (
 # CONFIG
 # =====================
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
 
-DB_FILE = "db.json"
+ADMIN_ID_RAW = os.getenv("ADMIN_ID", "0")
 
 if not BOT_TOKEN:
     raise Exception("BOT_TOKEN is missing!")
+
+try:
+    ADMIN_ID = int(ADMIN_ID_RAW)
+except:
+    raise Exception("ADMIN_ID must be a valid number")
+
+DB_FILE = "db.json"
 
 # =====================
 # DB
@@ -118,7 +124,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("✅ Page saved")
 
 # =====================
-# PHOTO HANDLER (PAYMENT PROOF)
+# PHOTO HANDLER
 # =====================
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
@@ -194,8 +200,9 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"📌 Plan: ${user['plan']}\n"
         f"📄 Pages: {len(user['pages'])}/{user['limit']}"
     )
+
 # =====================
-# MAIN
+# MAIN (FIXED FOR RENDER)
 # =====================
 def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
@@ -211,7 +218,7 @@ def main():
 
     print("Bot running...")
 
-    app.run_polling(drop_pending_updates=True)
+    app.run_polling(drop_pending_updates=True, close_loop=False)
 
 if __name__ == "__main__":
     main()
