@@ -19,10 +19,17 @@ from telegram.ext import (
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
 
+# 🔥 ADD THIS (Render gives PORT automatically)
+PORT = int(os.getenv("PORT", "10000"))
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # e.g. https://your-app.onrender.com
+
 DB_FILE = "db.json"
 
 if not BOT_TOKEN:
     raise Exception("BOT_TOKEN is missing!")
+
+if not WEBHOOK_URL:
+    print("⚠️ WARNING: WEBHOOK_URL is not set")
 
 # =====================
 # DB
@@ -49,7 +56,7 @@ def is_facebook_link(text: str):
     return bool(re.match(r"https?://(www\.)?facebook\.com/.+", text))
 
 # =====================
-# START (KHMER)
+# HANDLERS (UNCHANGED)
 # =====================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
@@ -59,9 +66,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/status - មើលស្ថានភាព"
     )
 
-# =====================
-# FREE PLAN
-# =====================
 async def free(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.message.from_user.id)
 
@@ -76,9 +80,6 @@ async def free(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text("🎉 អ្នកបានបើកគម្រោងឥតគិតថ្លៃ (1 page)")
 
-# =====================
-# BUY
-# =====================
 async def buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "💳 តម្លៃគម្រោង៖\n\n"
@@ -88,9 +89,6 @@ async def buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "ផ្ញើរូបភាពបង់ប្រាក់មក 📩"
     )
 
-# =====================
-# TEXT HANDLER
-# =====================
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.message.from_user.id)
     text = update.message.text
@@ -117,9 +115,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text("✅ បានរក្សាទុក page រួចហើយ")
 
-# =====================
-# PHOTO HANDLER
-# =====================
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
 
@@ -138,9 +133,6 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text("📩 បានផ្ញើទៅ admin ហើយ")
 
-# =====================
-# APPROVE
-# =====================
 async def approve_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -175,9 +167,6 @@ async def approve_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await query.message.reply_text("✅ Approved")
 
-# =====================
-# STATUS
-# =====================
 async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.message.from_user.id)
 
@@ -193,7 +182,7 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 # =====================
-# MAIN (FIXED FOR RENDER)
+# 🔥 FIXED MAIN (WEBHOOK MODE FOR RENDER)
 # =====================
 def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
@@ -207,10 +196,15 @@ def main():
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     app.add_handler(CallbackQueryHandler(approve_callback))
 
-    print("Bot running...")
+    print("🚀 Bot running in WEBHOOK mode...")
 
-    # 🔥 IMPORTANT: simple polling (NO asyncio, NO web server)
-    app.run_polling(drop_pending_updates=True)
+    # 🔥 THIS IS THE ONLY CORRECT WAY ON RENDER WEB SERVICE
+    app.run_webhook(
+        listen="0.0.0.0",
+        port=PORT,
+        webhook_url=WEBHOOK_URL,
+        drop_pending_updates=True
+    )
 
 if __name__ == "__main__":
     main()
