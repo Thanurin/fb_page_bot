@@ -42,31 +42,40 @@ def save_db(data):
 
 users = load_db()
 
-# ================= VALIDATION =================
+# ================= HELPERS =================
 def is_facebook_link(text: str):
     return bool(re.match(r"https?://(www\.)?facebook\.com/.+", text))
 
 def expired(user):
     return "expire" in user and time.time() > user["expire"]
 
-# ================= HANDLERS =================
+def ensure_user(user_id):
+    if user_id not in users:
+        users[user_id] = {
+            "plan": "free",
+            "limit": 1,
+            "expire": time.time() + 9999999999,
+            "pages": []
+        }
+        save_db(users)
+
+# ================= START =================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("👋 សួស្តី! (/free /buy /status)")
 
+# ================= FREE =================
 async def free(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.message.from_user.id)
+    ensure_user(user_id)
 
-    users[user_id] = {
-        "plan": "free",
-        "limit": 1,
-        "expire": time.time() + 9999999999,
-        "pages": []
-    }
-
+    users[user_id]["plan"] = "free"
+    users[user_id]["limit"] = 1
+    users[user_id]["expire"] = time.time() + 9999999999
     save_db(users)
-    await update.message.reply_text("🎉 Free plan activated (1 page)")
 
-# ================= BUY (UPDATED WITH QR) =================
+    await update.message.reply_text("🎉 Free plan activated")
+
+# ================= BUY (WITH QR) =================
 async def buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         [InlineKeyboardButton("$3 → 10 pages", callback_data="buy:3")],
@@ -74,18 +83,33 @@ async def buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("$12 → 30 pages", callback_data="buy:12")],
     ]
 
-    await update.message.reply_photo(
-        photo=open("qr.png", "rb"),
-        caption=
-        "💳 តម្លៃគម្រោង៖\n\n"
-        "$3 → 10 pages\n"
-        "$6 → 20 pages\n"
-        "$12 → 30 pages\n\n"
-        "📩 Scan QR ដើម្បីបង់ប្រាក់",
-        reply_markup=InlineKeyboardMarkup(keyboard)
+    qr_path = "qr.png"
+
+    if os.path.exists(qr_path):
+        await update.message.reply_photo(
+            photo=open(qr_path, "rb"),
+            caption="💳 Scan QR ដើម្បីបង់ប្រាក់\n\n$3 / $6 / $12 Plans",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+    else:
+        await update.message.reply_text(
+            "💳 Scan QR មិនមាន (missing qr.png)\n\n$3 / $6 / $12 Plans",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+
+# ================= STATUS =================
+async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = str(update.message.from_user.id)
+    ensure_user(user_id)
+
+    user = users[user_id]
+
+    await update.message.reply_text(
+        f"📌 Plan: {user['plan']}\n"
+        f"📄 Pages: {len(user['pages'])}/{user['limit']}"
     )
 
-# ================= TEXT =================
+# ================= TEXT HANDLER =================
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.message.from_user.id)
     text = update.message.text
@@ -93,28 +117,27 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if text.startswith("/"):
         return
 
-    if user_id not in users:
-        return await update.message.reply_text("សូមប្រើ /free ជាមុនសិន")
-
+    ensure_user(user_id)
     user = users[user_id]
 
     if expired(user):
-        del users[user_id]
+        user["plan"] = "expired"
+        user["limit"] = 0
         save_db(users)
-        return await update.message.reply_text("❌ Plan បានផុតកំណត់")
+        return await update.message.reply_text("❌ Plan expired")
 
     if not is_facebook_link(text):
-        return await update.message.reply_text("❌ Link Facebook មិនត្រឹមត្រូវ")
+        return await update.message.reply_text("❌ Invalid Facebook link")
 
     if len(user["pages"]) >= user["limit"]:
-        return await update.message.reply_text("❌ អស់ limit ហើយ")
+        return await update.message.reply_text("❌ Limit reached")
 
     user["pages"].append(text)
     save_db(users)
 
-    await update.message.reply_text("✅ បានរក្សាទុករួចហើយ")
+    await update.message.reply_text("✅ Saved")
 
-# ================= PHOTO =================
+# ================= PHOTO (PAYMENT) =================
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
 
@@ -127,11 +150,11 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_photo(
         chat_id=ADMIN_ID,
         photo=update.message.photo[-1].file_id,
-        caption=f"💰 Payment ពី {user.id}",
+        caption=f"💰 Payment from {user.id}",
         reply_markup=InlineKeyboardMarkup(keyboard),
     )
 
-    await update.message.reply_text("📩 បានផ្ញើទៅ admin")
+    await update.message.reply_text("📩 Sent to admin")
 
 # ================= APPROVE =================
 async def approve(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -145,12 +168,12 @@ async def approve(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     plans = {"3": 10, "6": 20, "12": 30}
 
-    users[user_id] = {
-        "plan": plan,
-        "limit": plans[plan],
-        "expire": time.time() + 365 * 86400,
-        "pages": []
-    }
+    ensure_user(user_id)
+
+    # IMPORTANT: DO NOT RESET USER
+    users[user_id]["plan"] = plan
+    users[user_id]["limit"] = plans[plan]
+    users[user_id]["expire"] = time.time() + 365 * 86400
 
     save_db(users)
 
@@ -161,18 +184,19 @@ async def approve(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await q.message.reply_text("✅ Done")
 
-# ================= BOT APP =================
+# ================= WEBHOOK APP =================
 app = ApplicationBuilder().token(BOT_TOKEN).build()
 
 app.add_handler(CommandHandler("start", start))
 app.add_handler(CommandHandler("free", free))
 app.add_handler(CommandHandler("buy", buy))
+app.add_handler(CommandHandler("status", status))
 
 app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
 app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
 app.add_handler(CallbackQueryHandler(approve))
 
-# ================= WEBHOOK SERVER =================
+# ================= WEB SERVER =================
 async def webhook(request):
     data = await request.json()
     update = Update.de_json(data, app.bot)
@@ -180,7 +204,7 @@ async def webhook(request):
     return web.Response(text="ok")
 
 async def health(request):
-    return web.Response(text="Bot is running")
+    return web.Response(text="Bot running")
 
 async def main():
     await app.initialize()
@@ -198,7 +222,7 @@ async def main():
     site = web.TCPSite(runner, "0.0.0.0", PORT)
     await site.start()
 
-    print("🚀 Webhook bot running")
+    print("🚀 Webhook bot running stable")
 
     await asyncio.Event().wait()
 
