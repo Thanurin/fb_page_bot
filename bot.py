@@ -19,7 +19,7 @@ from telegram.ext import (
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
 PORT = int(os.getenv("PORT", 10000))
-WEBHOOK_URL = os.getenv("WEBHOOK_URL")
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # https://your-app.onrender.com/webhook
 
 DB_FILE = "db.json"
 
@@ -61,7 +61,7 @@ def ensure_user(user_id):
 
 # ================= START =================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("👋 សួស្តី! (/free /buy /status)")
+    await update.message.reply_text("👋 សួស្តី! ប្រើ /free /buy /status")
 
 # ================= FREE =================
 async def free(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -73,27 +73,30 @@ async def free(update: Update, context: ContextTypes.DEFAULT_TYPE):
     users[user_id]["expire"] = time.time() + 9999999999
     save_db(users)
 
-    await update.message.reply_text("🎉 Free plan activated")
+    await update.message.reply_text("🎉 អ្នកបានប្រើ Free plan រួចហើយ (1 page)")
 
-# ================= BUY (WITH QR) =================
+# ================= BUY =================
 async def buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    qr_path = "qr.png"
+
     keyboard = [
         [InlineKeyboardButton("$3 → 10 pages", callback_data="buy:3")],
         [InlineKeyboardButton("$6 → 20 pages", callback_data="buy:6")],
         [InlineKeyboardButton("$12 → 30 pages", callback_data="buy:12")],
     ]
 
-    qr_path = "qr.png"
+    caption = "💳 ស្កេន QR ដើម្បីបង់ប្រាក់\n\nជ្រើស Plan ខាងក្រោម៖"
 
     if os.path.exists(qr_path):
-        await update.message.reply_photo(
-            photo=open(qr_path, "rb"),
-            caption="💳 Scan QR ដើម្បីបង់ប្រាក់\n\n$3 / $6 / $12 Plans",
-            reply_markup=InlineKeyboardMarkup(keyboard)
-        )
+        with open(qr_path, "rb") as f:
+            await update.message.reply_photo(
+                photo=f,
+                caption=caption,
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
     else:
         await update.message.reply_text(
-            "💳 Scan QR មិនមាន (missing qr.png)\n\n$3 / $6 / $12 Plans",
+            "⚠️ QR មិនមាន (qr.png missing)\n\n💳 ជ្រើស Plan:",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
 
@@ -109,7 +112,7 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"📄 Pages: {len(user['pages'])}/{user['limit']}"
     )
 
-# ================= TEXT HANDLER =================
+# ================= TEXT =================
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.message.from_user.id)
     text = update.message.text
@@ -120,24 +123,25 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ensure_user(user_id)
     user = users[user_id]
 
+    # expired check
     if expired(user):
         user["plan"] = "expired"
         user["limit"] = 0
         save_db(users)
-        return await update.message.reply_text("❌ Plan expired")
+        return await update.message.reply_text("❌ Plan អស់សុពលភាព")
 
     if not is_facebook_link(text):
-        return await update.message.reply_text("❌ Invalid Facebook link")
+        return await update.message.reply_text("❌ Link Facebook មិនត្រឹមត្រូវ")
 
     if len(user["pages"]) >= user["limit"]:
-        return await update.message.reply_text("❌ Limit reached")
+        return await update.message.reply_text("❌ អ្នកបានដល់ Limit ហើយ")
 
     user["pages"].append(text)
     save_db(users)
 
-    await update.message.reply_text("✅ Saved")
+    await update.message.reply_text("✅ បានរក្សាទុករួចហើយ")
 
-# ================= PHOTO (PAYMENT) =================
+# ================= PAYMENT PHOTO =================
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
 
@@ -150,11 +154,11 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_photo(
         chat_id=ADMIN_ID,
         photo=update.message.photo[-1].file_id,
-        caption=f"💰 Payment from {user.id}",
+        caption=f"💰 Payment ពី user {user.id}",
         reply_markup=InlineKeyboardMarkup(keyboard),
     )
 
-    await update.message.reply_text("📩 Sent to admin")
+    await update.message.reply_text("📩 បានផ្ញើទៅ Admin")
 
 # ================= APPROVE =================
 async def approve(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -165,12 +169,11 @@ async def approve(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     _, user_id, plan = q.data.split(":")
-
     plans = {"3": 10, "6": 20, "12": 30}
 
     ensure_user(user_id)
 
-    # IMPORTANT: DO NOT RESET USER
+    # IMPORTANT: DON'T RESET DATA
     users[user_id]["plan"] = plan
     users[user_id]["limit"] = plans[plan]
     users[user_id]["expire"] = time.time() + 365 * 86400
@@ -179,12 +182,12 @@ async def approve(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await context.bot.send_message(
         chat_id=int(user_id),
-        text=f"🎉 Approved: ${plan} plan"
+        text=f"🎉 អ្នកបានអនុម័ត Plan ${plan} រួចហើយ!"
     )
 
     await q.message.reply_text("✅ Done")
 
-# ================= WEBHOOK APP =================
+# ================= APP =================
 app = ApplicationBuilder().token(BOT_TOKEN).build()
 
 app.add_handler(CommandHandler("start", start))
@@ -196,7 +199,7 @@ app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
 app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
 app.add_handler(CallbackQueryHandler(approve))
 
-# ================= WEB SERVER =================
+# ================= WEBHOOK SERVER =================
 async def webhook(request):
     data = await request.json()
     update = Update.de_json(data, app.bot)
@@ -204,12 +207,13 @@ async def webhook(request):
     return web.Response(text="ok")
 
 async def health(request):
-    return web.Response(text="Bot running")
+    return web.Response(text="Bot is running")
 
 async def main():
     await app.initialize()
     await app.start()
 
+    # set webhook
     await app.bot.set_webhook(WEBHOOK_URL)
 
     web_app = web.Application()
@@ -222,7 +226,7 @@ async def main():
     site = web.TCPSite(runner, "0.0.0.0", PORT)
     await site.start()
 
-    print("🚀 Webhook bot running stable")
+    print("🚀 Bot running in WEBHOOK mode (stable)")
 
     await asyncio.Event().wait()
 
